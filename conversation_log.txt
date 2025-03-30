@@ -1,6 +1,6 @@
 
-[2025-03-27T04:54:40.212Z] User: Hello
-[2025-03-27T04:54:40.212Z] Bot: Thank you for calling Heritage Roofing. How are you doing today? Hi there. How can I assist you today?
+[2025-03-30T16:06:31.510Z] User: Hello
+[2025-03-30T16:06:31.510Z] Bot: Thank you for calling Heritage Roofing. How are you doing today?  Hi there. How can I assist you today?
 
-[2025-03-27T04:55:22.284Z] User: Hello! I'm doing well, thank you for asking. I've noticed that the roof shingles on my house are starting to curl and buckle a bit. Could you guys help me out with a roof replacement or repair?
-[2025-03-27T04:55:22.284Z] Bot: Great to hear. Could you please provide me with your street address? I see to determine if we absolutely we can help with that first. Could you, please provide me with your street address? I want to make sure we provide service in your area.
+[2025-03-30T16:07:19.888Z] User: Hello, thank you for taking my call. I'm doing well, thank you for asking. I've noticed a few leaks in my roof after the recent heavy rain and I wanted to talk about possible repair options. Can you assist me with this?
+[2025-03-30T16:07:19.888Z] Bot: You're welcome. Could you please provide  I can definitely help with. Of course, first. Can you provide me with your street address? This will help us determine if we provide service in your area.

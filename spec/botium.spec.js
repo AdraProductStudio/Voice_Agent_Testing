@@ -60,12 +60,12 @@ fs.writeFileSync(botiumConfigPath, JSON.stringify(botiumConfig, null, 2));
 
 console.log("✅ botium.json updated successfully!");
 
-app.use(cors({ origin: "http://localhost:3001" }));
+app.use(cors({ origin: "*" }));
 
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3001",
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
@@ -76,7 +76,7 @@ io.on("connection", (socket) => {
   console.log("A client connected:", socket.id);
 
   socket.on("disconnect", () => {
-    console.log("❌ Client ${socket.id} disconnected");
+    console.log(`❌ Client ${socket.id} disconnected`);
 
     // Stop and clean up the bot if it was running
     if (activeBots.has(socket.id)) {
