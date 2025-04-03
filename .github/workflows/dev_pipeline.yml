@@ -160,6 +160,14 @@ jobs:
             
             echo "Elastic IP associated with instance ID: ${{ env.instance_id }}"
 
+            EIP=$(aws ec2 describe-addresses \
+                --allocation-ids ${{ env.EIP_ALLOCATION_ID }} \
+                --query 'Addresses[0].PublicIp' \
+                --output text)
+
+            echo "Elastic IP is: $EIP"
+            echo "public_ip=$EIP" >> $GITHUB_ENV
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
