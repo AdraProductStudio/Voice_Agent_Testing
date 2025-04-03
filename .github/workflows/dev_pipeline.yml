@@ -238,7 +238,8 @@ jobs:
 
           chmod 600 /home/ubuntu/.env
         
-          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << 'SERVICE'
+          # Create systemd service file
+          sudo bash -c "cat > /etc/systemd/system/${CONTAINER_NAME}.service" <<EOF
           [Unit]
           Description=Voice Agent Test Docker Container
           After=network.target docker.service
@@ -248,16 +249,16 @@ jobs:
           Restart=always
           ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME}
           ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME}
-          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \
-            --env-file /home/ubuntu/.env \
-            -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} \
-            -p 3000:3000 -p 4040:4040 \
+          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \\
+            --env-file /home/ubuntu/.env \\
+            -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} \\
+            -p 3000:3000 -p 4040:4040 \\
             ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
 
           [Install]
           WantedBy=multi-user.target
-          SERVICE          
+          EOF          
 
           # Reload systemd and start the service
           sudo systemctl daemon-reload          
