@@ -18,6 +18,7 @@ RUN npm install -g botium-cli
 
 # Install project dependencies
 RUN npm install \
+    compression \
     botium-bindings \
     botium-connector-twilio-ivr \
     twilio \
