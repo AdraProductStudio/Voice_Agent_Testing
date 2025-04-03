@@ -238,7 +238,7 @@ jobs:
 
           chmod 600 /home/ubuntu/.env
         
-          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << SERVICE
+          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << 'SERVICE'
           [Unit]
           Description=Voice Agent Test Docker Container
           After=network.target docker.service
@@ -257,8 +257,7 @@ jobs:
 
           [Install]
           WantedBy=multi-user.target
-          SERVICE 
-          EOF         
+          SERVICE          
 
           # Reload systemd and start the service
           sudo systemctl daemon-reload          
