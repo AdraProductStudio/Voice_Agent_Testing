@@ -211,23 +211,6 @@ jobs:
         
           # Pull new image and deploy service using systemd  
           docker pull ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
-        
-          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << SERVICE
-          [Unit]
-          Description=ConsumeWise API Container 
-          After=network.target docker.service
-          Requires=docker.service
-
-          [Service]
-          Restart=always
-          ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME} 
-          ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME} 
-          ExecStart=/usr/bin/docker run -it --rm --env-file /home/ubuntu/.env -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} -p 3000:3000 -p 4040:4040 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
-          ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
-
-          [Install]
-          WantedBy=multi-user.target
-          SERVICE
 
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
           echo "PROJECTNAME=${{ secrets.PROJECTNAME }}" >> .env
@@ -254,9 +237,30 @@ jobs:
           echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
 
           chmod 600 /home/ubuntu/.env
+        
+          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << SERVICE
+          [Unit]
+          Description=Voice Agent Test Docker Container
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Restart=always
+          ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME}
+          ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME}
+          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \
+            --env-file /home/ubuntu/.env \
+            -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} \
+            -p 3000:3000 -p 4040:4040 \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
+
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE          
 
           # Reload systemd and start the service
-          sudo systemctl daemon-reload
-          sudo systemctl start ${CONTAINER_NAME}
+          sudo systemctl daemon-reload          
           sudo systemctl enable ${CONTAINER_NAME}
+          sudo systemctl start ${CONTAINER_NAME}
           EOF
