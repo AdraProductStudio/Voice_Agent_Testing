@@ -229,6 +229,30 @@ jobs:
           WantedBy=multi-user.target
           SERVICE
 
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          echo "PROJECTNAME=${{ secrets.PROJECTNAME }}" >> .env
+          echo "CONTAINERMODE=${{ secrets.CONTAINERMODE }}" >> .env
+          echo "TWILIO_IVR_ACCOUNT_SID=${{ secrets.TWILIO_IVR_ACCOUNT_SID }}" >> .env
+          echo "TWILIO_IVR_AUTH_TOKEN=${{ secrets.TWILIO_IVR_AUTH_TOKEN }}" >> .env
+          echo "TWILIO_IVR_FROM=${{ secrets.TWILIO_IVR_FROM }}" >> .env
+          echo "TWILIO_IVR_TO=${{ secrets.TWILIO_IVR_TO }}" >> .env
+          echo "TWILIO_IVR_INBOUNDPORT=${{ secrets.TWILIO_IVR_INBOUNDPORT }}" >> .env
+          echo "TWILIO_IVR_PUBLICURL=${{ secrets.TWILIO_IVR_PUBLICURL }}" >> .env
+          echo "TWILIO_CALL_DIRECTION=${{ secrets.TWILIO_CALL_DIRECTION }}" >> .env
+          echo "TWILIO_IVR_STT=${{ secrets.TWILIO_IVR_STT }}" >> .env
+          echo "TWILIO_IVR_TTS=${{ secrets.TWILIO_IVR_TTS }}" >> .env
+          echo "DEEPGRAM_API_KEY=${{ secrets.DEEPGRAM_API_KEY }}" >> .env
+          echo "DEEPGRAM_STT_MODEL=${{ secrets.DEEPGRAM_STT_MODEL }}" >> .env
+          echo "DEEPGRAM_TTS_VOICE=${{ secrets.DEEPGRAM_TTS_VOICE }}" >> .env
+          echo "TWILIO_IVR_STATUS_CALLBACK=${{ secrets.TWILIO_IVR_STATUS_CALLBACK }}" >> .env
+          echo "BOTIUM_INBOUND_PROXY_START=${{ secrets.BOTIUM_INBOUND_PROXY_START }}" >> .env
+          echo "CLEANUPTEMPDIR=${{ secrets.CLEANUPTEMPDIR }}" >> .env
+          echo "TWILIO_IVR_RECORD=${{ secrets.TWILIO_IVR_RECORD }}" >> .env
+          echo "WAITFORBOTTIMEOUT=${{ secrets.WAITFORBOTTIMEOUT }}" >> .env
+          echo "SCRIPTING_ENABLE_MEMORY=${{ secrets.SCRIPTING_ENABLE_MEMORY }}" >> .env
+          echo "DEBUG=${{ secrets.DEBUG }}" >> .env
+          echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
+
           # Reload systemd and start the service
           sudo systemctl daemon-reload
           sudo systemctl start ${CONTAINER_NAME}
