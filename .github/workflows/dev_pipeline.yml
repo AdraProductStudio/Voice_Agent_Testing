@@ -222,7 +222,7 @@ jobs:
           Restart=always
           ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME} 
           ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME} 
-          ExecStart=/usr/bin/docker run -it --rm -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} -p 3000:3000 -p 4040:4040 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          ExecStart=/usr/bin/docker run -it --rm --env-file /home/ubuntu/.env -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} -p 3000:3000 -p 4040:4040 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
 
           [Install]
@@ -252,6 +252,8 @@ jobs:
           echo "SCRIPTING_ENABLE_MEMORY=${{ secrets.SCRIPTING_ENABLE_MEMORY }}" >> .env
           echo "DEBUG=${{ secrets.DEBUG }}" >> .env
           echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
+
+          chmod 600 /home/ubuntu/.env
 
           # Reload systemd and start the service
           sudo systemctl daemon-reload
