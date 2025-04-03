@@ -22,6 +22,7 @@ env:
   SECURITY_GROUP_NAME: launch-wizard-1
   SECURITY_GROUP_DESCRIPTION: "launch-wizard-1 created via GitHub Actions"
   VPC_ID: vpc-048b30acc2bf11cf2
+  EIP_ALLOCATION_ID: eipalloc-024f7ae5331890357
   ECR_ROLE_NAME: EC2ECRAccessRole
   
 
@@ -149,6 +150,15 @@ jobs:
             --output text)
           echo "Public IP Address is $PUBLIC_IP"
           echo "public_ip=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Associate Elastic IP
+        run: |
+            # Option 1: Using instance ID directly
+            aws ec2 associate-address \
+              --instance-id ${{ env.instance_id }} \
+              --allocation-id ${{ env.EIP_ALLOCATION_ID }}   
+            
+            echo "Elastic IP associated with instance ID: ${{ env.instance_id }}"
 
       - name: Login to Amazon ECR
         id: login-ecr
