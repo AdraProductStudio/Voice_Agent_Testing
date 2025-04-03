@@ -16,7 +16,7 @@ env:
   ECR_REPOSITORY: voice-agent-test
   CONTAINER_NAME: voiceagenttest
   INSTANCE_TYPE: t2.medium
-  AMI_ID: ami-06b6e5225d1db5f46
+  AMI_ID: ami-0f9de6e2d2f067fca
   KEY_NAME: mr-call-test
   INSTANCE_NAME: Voice-Agent-Testing-API  
   SECURITY_GROUP_NAME: launch-wizard-1
