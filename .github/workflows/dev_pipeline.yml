@@ -128,7 +128,7 @@ jobs:
             --count 1 \
             --instance-type ${{ env.INSTANCE_TYPE }} \
             --key-name ${{ env.KEY_NAME }} \
-            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"Encrypted":false,"DeleteOnTermination":true,"SnapshotId":"snap-01a4ef786b76dfcdf","VolumeSize":30,"VolumeType":"gp2"}}]' \
+            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30,"VolumeType":"gp2","DeleteOnTermination":true}}]' \
             --network-interfaces '[{"AssociatePublicIpAddress":true,"DeviceIndex":0,"Groups":["${{ env.security_group_id }}"]}]' \
             --iam-instance-profile Name=${{ env.ECR_ROLE_NAME }} \
             --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${{ env.INSTANCE_NAME }}}]' \
