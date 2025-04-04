@@ -233,6 +233,8 @@ jobs:
           # Pull new image and deploy service using systemd  
           docker pull ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
 
+          sudo rm -rf /home/ubuntu/.env
+
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
           echo "PROJECTNAME=${{ secrets.PROJECTNAME }}" >> .env
           echo "CONTAINERMODE=${{ secrets.CONTAINERMODE }}" >> .env
