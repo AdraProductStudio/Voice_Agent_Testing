@@ -18,6 +18,8 @@ const botiumConfigPath = "botium.json";
 app.use(compression({ filter: (req, res) => req.path !== "/start-botium-test" }));
 app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] }));
 app.use(express.json());
+app.set('trust proxy', true);
+
 
 async function startBotiumSession(userId) {
   try {

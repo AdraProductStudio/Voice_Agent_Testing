@@ -24,6 +24,6 @@ yarn-debug.log*
 yarn-error.log*
 mr-call-test.pem
 
-/Dockerfile
-/entrypoint.sh
-/.github
+Dockerfile
+entrypoint.sh
+.github
