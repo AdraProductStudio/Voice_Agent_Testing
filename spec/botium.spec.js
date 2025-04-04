@@ -28,6 +28,7 @@ async function startBotiumSession(userId) {
     await bot.Start();
     userSessions[userId] = { bot, botiumDriver, timeout: setTimeout(() => stopBotiumSession(userId), botiumSessionTimeout) };
     console.log(`✅ Botium session started for ${userId}`);
+    console.log("process.env.OPENAI_API_KEY",process.env.OPENAI_API_KEY)
     return bot;
   } catch (error) {
     console.error(`❌ Error starting Botium for ${userId}:`, error);
