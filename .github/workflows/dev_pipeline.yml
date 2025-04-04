@@ -16,12 +16,13 @@ env:
   ECR_REPOSITORY: voice-agent-test
   CONTAINER_NAME: voiceagenttest
   INSTANCE_TYPE: t2.medium
-  AMI_ID: ami-06b6e5225d1db5f46
+  AMI_ID: ami-0f9de6e2d2f067fca
   KEY_NAME: mr-call-test
   INSTANCE_NAME: Voice-Agent-Testing-API  
   SECURITY_GROUP_NAME: launch-wizard-1
   SECURITY_GROUP_DESCRIPTION: "launch-wizard-1 created via GitHub Actions"
   VPC_ID: vpc-048b30acc2bf11cf2
+  EIP_ALLOCATION_ID: eipalloc-024f7ae5331890357
   ECR_ROLE_NAME: EC2ECRAccessRole
   
 
@@ -77,7 +78,8 @@ jobs:
                 {"IpProtocol":"tcp","FromPort":22,"ToPort":22,"CidrIp":"0.0.0.0/0"},
                 {"IpProtocol":"tcp","FromPort":80,"ToPort":80,"CidrIp":"0.0.0.0/0"},
                 {"IpProtocol":"tcp","FromPort":443,"ToPort":443,"CidrIp":"0.0.0.0/0"},
-                {"IpProtocol":"tcp","FromPort":3000,"ToPort":3000,"CidrIp":"0.0.0.0/0"}
+                {"IpProtocol":"tcp","FromPort":3000,"ToPort":3000,"CidrIp":"0.0.0.0/0"},
+                {"IpProtocol":"tcp","FromPort":45100,"ToPort":45100,"CidrIp":"0.0.0.0/0"},
               ]'
   
             for RULE in $(echo "$RULES" | jq -c '.[]'); do
@@ -128,7 +130,7 @@ jobs:
             --count 1 \
             --instance-type ${{ env.INSTANCE_TYPE }} \
             --key-name ${{ env.KEY_NAME }} \
-            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"Encrypted":false,"DeleteOnTermination":true,"SnapshotId":"snap-01a4ef786b76dfcdf","VolumeSize":30,"VolumeType":"gp2"}}]' \
+            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30,"VolumeType":"gp2","DeleteOnTermination":true}}]' \
             --network-interfaces '[{"AssociatePublicIpAddress":true,"DeviceIndex":0,"Groups":["${{ env.security_group_id }}"]}]' \
             --iam-instance-profile Name=${{ env.ECR_ROLE_NAME }} \
             --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${{ env.INSTANCE_NAME }}}]' \
@@ -149,6 +151,23 @@ jobs:
             --output text)
           echo "Public IP Address is $PUBLIC_IP"
           echo "public_ip=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Associate Elastic IP
+        run: |
+            # Option 1: Using instance ID directly
+            aws ec2 associate-address \
+              --instance-id ${{ env.instance_id }} \
+              --allocation-id ${{ env.EIP_ALLOCATION_ID }}   
+            
+            echo "Elastic IP associated with instance ID: ${{ env.instance_id }}"
+
+            EIP=$(aws ec2 describe-addresses \
+                --allocation-ids ${{ env.EIP_ALLOCATION_ID }} \
+                --query 'Addresses[0].PublicIp' \
+                --output text)
+
+            echo "Elastic IP is: $EIP"
+            echo "public_ip=$EIP" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -183,7 +202,10 @@ jobs:
             ca-certificates \
             curl \
             unzip \
-            lsb-release            
+            lsb-release \
+            nginx \
+            certbot \
+            python3-certbot-nginx           
           
           # Install Docker
           sudo curl -fsSL https://get.docker.com -o get-docker.sh
@@ -211,26 +233,93 @@ jobs:
         
           # Pull new image and deploy service using systemd  
           docker pull ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+
+          sudo rm -rf /home/ubuntu/.env
+
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          echo "PROJECTNAME=${{ secrets.PROJECTNAME }}" >> .env
+          echo "CONTAINERMODE=${{ secrets.CONTAINERMODE }}" >> .env
+          echo "TWILIO_IVR_ACCOUNT_SID=${{ secrets.TWILIO_IVR_ACCOUNT_SID }}" >> .env
+          echo "TWILIO_IVR_AUTH_TOKEN=${{ secrets.TWILIO_IVR_AUTH_TOKEN }}" >> .env
+          echo "TWILIO_IVR_FROM=${{ secrets.TWILIO_IVR_FROM }}" >> .env
+          echo "TWILIO_IVR_TO=${{ secrets.TWILIO_IVR_TO }}" >> .env
+          echo "TWILIO_IVR_INBOUNDPORT=${{ secrets.TWILIO_IVR_INBOUNDPORT }}" >> .env
+          echo "TWILIO_IVR_PUBLICURL=${{ secrets.TWILIO_IVR_PUBLICURL }}" >> .env
+          echo "TWILIO_CALL_DIRECTION=${{ secrets.TWILIO_CALL_DIRECTION }}" >> .env
+          echo "TWILIO_IVR_STT=${{ secrets.TWILIO_IVR_STT }}" >> .env
+          echo "TWILIO_IVR_TTS=${{ secrets.TWILIO_IVR_TTS }}" >> .env
+          echo "DEEPGRAM_API_KEY=${{ secrets.DEEPGRAM_API_KEY }}" >> .env
+          echo "DEEPGRAM_STT_MODEL=${{ secrets.DEEPGRAM_STT_MODEL }}" >> .env
+          echo "DEEPGRAM_TTS_VOICE=${{ secrets.DEEPGRAM_TTS_VOICE }}" >> .env
+          echo "TWILIO_IVR_STATUS_CALLBACK=${{ secrets.TWILIO_IVR_STATUS_CALLBACK }}" >> .env
+          echo "BOTIUM_INBOUND_PROXY_START=${{ secrets.BOTIUM_INBOUND_PROXY_START }}" >> .env
+          echo "CLEANUPTEMPDIR=${{ secrets.CLEANUPTEMPDIR }}" >> .env
+          echo "TWILIO_IVR_RECORD=${{ secrets.TWILIO_IVR_RECORD }}" >> .env
+          echo "WAITFORBOTTIMEOUT=${{ secrets.WAITFORBOTTIMEOUT }}" >> .env
+          echo "SCRIPTING_ENABLE_MEMORY=${{ secrets.SCRIPTING_ENABLE_MEMORY }}" >> .env
+          echo "DEBUG=${{ secrets.DEBUG }}" >> .env
+          echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
+
+          chmod 600 /home/ubuntu/.env
         
-          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << SERVICE
+          # Create systemd service file using a *nested* heredoc inside SSH
+          sudo bash -c "cat > /etc/systemd/system/${CONTAINER_NAME}.service" <<'EOF'
           [Unit]
-          Description=ConsumeWise API Container 
+          Description=Voice Agent Test Docker Container
           After=network.target docker.service
           Requires=docker.service
 
           [Service]
           Restart=always
-          ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME} 
-          ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME} 
-          ExecStart=/usr/bin/docker run --rm --name ${CONTAINER_NAME} -p 5357:5357 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME}
+          ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME}
+          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \
+            --env-file /home/ubuntu/.env \
+            -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} \
+            -p 3000:3000 -p 45100:45100 \
+            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
 
           [Install]
           WantedBy=multi-user.target
-          SERVICE
 
-          # Reload systemd and start the service
-          sudo systemctl daemon-reload
-          sudo systemctl start ${CONTAINER_NAME}
-          sudo systemctl enable ${CONTAINER_NAME}
-          EOF
+      - name: Enable systemd service on EC2
+        run: |
+            ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ env.public_ip }} << EOF
+            # Start systemd service
+            sudo systemctl daemon-reload
+            sudo systemctl enable ${CONTAINER_NAME}
+            sudo systemctl start ${CONTAINER_NAME}
+
+      - name: Set up Nginx reverse proxy
+        run: |
+            ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ env.public_ip }} << EOF
+            # Set up Nginx reverse proxy
+            sudo bash -c "cat > /etc/nginx/sites-available/${CONTAINER_NAME}" <<'EOL'
+            server {
+                listen 80;
+                server_name testagent.modelrocket.ai;
+            
+                location / {
+                    proxy_pass http://localhost:3000;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            EOL
+
+      - name: Enable Nginx site and restart (Enable HTTPS)
+        run: |
+              ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ env.public_ip }} << EOF
+              # Enable Nginx site and restart
+              sudo rm /etc/nginx/sites-enabled/default
+              sudo ln -s /etc/nginx/sites-available/${CONTAINER_NAME} /etc/nginx/sites-enabled/
+              sudo nginx -t && sudo systemctl restart nginx
+
+              # Request Let's Encrypt SSL Certificate
+              sudo certbot --nginx -d testagent.modelrocket.ai --non-interactive --agree-tos -m dev@modelrocket.ai
+
+              # Auto-renewal (already set by Certbot via cron or systemd)
+              sudo systemctl restart ${CONTAINER_NAME}

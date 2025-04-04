@@ -23,3 +23,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 mr-call-test.pem
+
+/Dockerfile
+/entrypoint.sh
+/.github

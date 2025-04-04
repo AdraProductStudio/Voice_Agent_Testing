@@ -9,7 +9,7 @@ require("dotenv").config();
 
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const PORT = 5000;
+const PORT = 3000;
 const userSessions = {};
 const botiumSessionTimeout = 6 * 60 * 1000;
 const requestTimeout = 6 * 60 * 1000;
