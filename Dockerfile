@@ -37,7 +37,7 @@ RUN botium-cli init \
 COPY . .
 
 # Configure ports
-EXPOSE 4040 3000
+EXPOSE 45100 3000
 
 # Entrypoint script
 COPY entrypoint.sh /entrypoint.sh
