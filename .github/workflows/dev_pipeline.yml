@@ -1,0 +1,236 @@
+name: Deploy Voice-Agent-Testing-API Docker App to AWS EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Deploy the Voice-Agent-Testing-API from Dev"
+        default: "dev"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: voice-agent-test
+  CONTAINER_NAME: voiceagenttest
+  INSTANCE_TYPE: t2.medium
+  AMI_ID: ami-06b6e5225d1db5f46
+  KEY_NAME: mr-call-test
+  INSTANCE_NAME: Voice-Agent-Testing-API  
+  SECURITY_GROUP_NAME: launch-wizard-1
+  SECURITY_GROUP_DESCRIPTION: "launch-wizard-1 created via GitHub Actions"
+  VPC_ID: vpc-048b30acc2bf11cf2
+  ECR_ROLE_NAME: EC2ECRAccessRole
+  
+
+jobs:
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::533267126049:role/voiceagenttestrole
+
+      - name: Check if Security Group Exists
+        id: check-security-group
+        run: |
+            SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
+              --filters Name=group-name,Values=${{ env.SECURITY_GROUP_NAME }} \
+              --query 'SecurityGroups[0].GroupId' \
+              --output text)
+            
+            if [ "$SECURITY_GROUP_ID" == "None" ]; then
+              echo "Security group does not exist."
+              echo "security_group_exists=false" >> $GITHUB_ENV
+            else
+              echo "Security group exists with ID $SECURITY_GROUP_ID."
+              echo "security_group_exists=true" >> $GITHUB_ENV
+              echo "security_group_id=$SECURITY_GROUP_ID" >> $GITHUB_ENV
+            fi
+
+      - name: Create Security Group
+        id: create-security-group
+        if: env.security_group_exists == 'false'
+        run: |
+          SECURITY_GROUP_ID=$(aws ec2 create-security-group \
+            --group-name ${{ env.SECURITY_GROUP_NAME }} \
+            --description "${{ env.SECURITY_GROUP_DESCRIPTION }}" \
+            --vpc-id ${{ env.VPC_ID }} \
+            --query 'GroupId' \
+            --output text)
+          echo "Security Group ID is $SECURITY_GROUP_ID"
+          echo "security_group_id=$SECURITY_GROUP_ID" >> $GITHUB_ENV
+
+      - name: Authorize Security Group Ingress Rules (Avoid Duplicates)
+        run: |
+            RULES='[
+                {"IpProtocol":"tcp","FromPort":22,"ToPort":22,"CidrIp":"0.0.0.0/0"},
+                {"IpProtocol":"tcp","FromPort":80,"ToPort":80,"CidrIp":"0.0.0.0/0"},
+                {"IpProtocol":"tcp","FromPort":443,"ToPort":443,"CidrIp":"0.0.0.0/0"},
+                {"IpProtocol":"tcp","FromPort":3000,"ToPort":3000,"CidrIp":"0.0.0.0/0"}
+              ]'
+  
+            for RULE in $(echo "$RULES" | jq -c '.[]'); do
+              PROTOCOL=$(echo "$RULE" | jq -r '.IpProtocol')
+              FROM_PORT=$(echo "$RULE" | jq -r '.FromPort')
+              TO_PORT=$(echo "$RULE" | jq -r '.ToPort')
+              CIDR_IP=$(echo "$RULE" | jq -r '.CidrIp')
+  
+              EXISTING_RULE=$(aws ec2 describe-security-group-rules \
+                --filters Name=group-id,Values=${{ env.security_group_id }} \
+                --query 'SecurityGroupRules[?FromPort==`'$FROM_PORT'` && ToPort==`'$TO_PORT'` && IpProtocol==`'$PROTOCOL'` && CidrIpv4==`'$CIDR_IP'`]' \
+                --output text)
+  
+              if [ "$EXISTING_RULE" == "" ]; then
+                aws ec2 authorize-security-group-ingress \
+                  --group-id ${{ env.security_group_id }} \
+                  --protocol $PROTOCOL \
+                  --port $FROM_PORT-$TO_PORT \
+                  --cidr $CIDR_IP
+                echo "Added rule for protocol=$PROTOCOL, port=$FROM_PORT-$TO_PORT, CIDR=$CIDR_IP."
+              else
+                echo "Rule for protocol=$PROTOCOL, port=$FROM_PORT-$TO_PORT, CIDR=$CIDR_IP already exists."
+              fi
+            done
+
+      - name: Check if EC2 Instance Exists
+        id: check-instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${{ env.INSTANCE_NAME }}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          
+          if [ "$INSTANCE_ID" == "None" ]; then
+            echo "No running instance found with name ${{ env.INSTANCE_NAME }}."
+            echo "instance_exists=false" >> $GITHUB_ENV
+          else
+            echo "Instance $INSTANCE_ID already exists and is running."
+            echo "instance_exists=true" >> $GITHUB_ENV
+            echo "instance_id=$INSTANCE_ID" >> $GITHUB_ENV
+          fi
+
+      - name: Create EC2 Instance (if not exists)
+        if: env.instance_exists == 'false'
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id ${{ env.AMI_ID }} \
+            --count 1 \
+            --instance-type ${{ env.INSTANCE_TYPE }} \
+            --key-name ${{ env.KEY_NAME }} \
+            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"Encrypted":false,"DeleteOnTermination":true,"SnapshotId":"snap-01a4ef786b76dfcdf","VolumeSize":30,"VolumeType":"gp2"}}]' \
+            --network-interfaces '[{"AssociatePublicIpAddress":true,"DeviceIndex":0,"Groups":["${{ env.security_group_id }}"]}]' \
+            --iam-instance-profile Name=${{ env.ECR_ROLE_NAME }} \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${{ env.INSTANCE_NAME }}}]' \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+          echo "Instance ID is $INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> $GITHUB_ENV
+
+      - name: Wait for EC2 Instance to be Running
+        run: |
+          aws ec2 wait instance-running --instance-ids ${{ env.instance_id }}
+
+      - name: Get Public IP of EC2 Instance
+        run: |
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ env.instance_id }} \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "Public IP Address is $PUBLIC_IP"
+          echo "public_ip=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: true
+      
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT       
+
+      - name: Get SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+
+      - name: Deploy to EC2
+        run: |     
+          IMAGE_TAG="${{ github.sha }}"       
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ env.public_ip }} << EOF
+
+          # Update package lists and install Docker
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            gnupg \
+            ca-certificates \
+            curl \
+            unzip \
+            lsb-release            
+          
+          # Install Docker
+          sudo curl -fsSL https://get.docker.com -o get-docker.sh
+          sudo sh get-docker.sh
+          sudo usermod -aG docker ubuntu
+          newgrp docker
+
+          # Start and enable Docker service
+          sudo systemctl start docker
+          sudo systemctl enable docker
+            
+          # Cleanup existing containers/images
+          docker system prune -af --volumes || true
+        
+          # Install AWS CLI v2 (if not installed)
+          if ! command -v aws &> /dev/null; then
+            sudo curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            aws --version 
+          fi
+
+          # Re-authenticate Docker with Amazon ECR immediately before pulling images
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} 
+        
+          # Pull new image and deploy service using systemd  
+          docker pull ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+        
+          sudo tee /etc/systemd/system/$CONTAINER_NAME.service > /dev/null << SERVICE
+          [Unit]
+          Description=ConsumeWise API Container 
+          After=network.target docker.service
+          Requires=docker.service
+
+          [Service]
+          Restart=always
+          ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME} 
+          ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME} 
+          ExecStart=/usr/bin/docker run --rm --name ${CONTAINER_NAME} -p 5357:5357 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
+
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
+
+          # Reload systemd and start the service
+          sudo systemctl daemon-reload
+          sudo systemctl start ${CONTAINER_NAME}
+          sudo systemctl enable ${CONTAINER_NAME}
+          EOF
