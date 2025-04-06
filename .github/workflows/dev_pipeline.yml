@@ -331,4 +331,3 @@ jobs:
 
               # Auto-renewal (already set by Certbot via cron or systemd)
               sudo systemctl restart ${CONTAINER_NAME}
-              sudo reboot now
