@@ -272,10 +272,7 @@ jobs:
           Restart=always
           ExecStartPre=-/usr/bin/docker stop ${CONTAINER_NAME}
           ExecStartPre=-/usr/bin/docker rm ${CONTAINER_NAME}
-          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \
-            --env-file /home/ubuntu/.env \            
-            -p 3000:3000 \
-            ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} --env-file /home/ubuntu/.env -p 3000:3000 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
 
           [Install]
@@ -334,3 +331,4 @@ jobs:
 
               # Auto-renewal (already set by Certbot via cron or systemd)
               sudo systemctl restart ${CONTAINER_NAME}
+              sudo reboot now
