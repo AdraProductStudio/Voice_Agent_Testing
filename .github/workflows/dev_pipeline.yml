@@ -256,6 +256,7 @@ jobs:
           echo "DEBUG=${{ secrets.DEBUG }}" >> .env
           echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
           echo "NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }}" >> .env
+          echo "NGROCK_DOMAIN_LIST=${{ secrets.NGROCK_DOMAIN_LIST }}" >> .env
 
 
           chmod 600 /home/ubuntu/.env
