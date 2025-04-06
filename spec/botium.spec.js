@@ -29,7 +29,6 @@ async function startNgrok() {
   try {
     const randomPort = generateRandomPort(); // Generate a random port
     console.log(`Starting ngrok on port ${randomPort}...`);
-
     // Assuming at least one available domain
     if (available_domains.length > 0) {
       let assigning_domain = available_domains[0];
@@ -45,7 +44,8 @@ async function startNgrok() {
       if (listener && listener.url()) {
         const publicUrl = listener.url();
         console.log("Ngrok tunnel established at:", publicUrl);
-        let ngrok_data = { url: publicUrl, port: randomPort, assigned_domain: assigning_domain }
+        let ngrok_data = { url: publicUrl, port: randomPort, assigned_domain: assigning_domain };
+
         return ngrok_data
       } else {
         throw new Error("Ngrok did not return a valid listener object with a URL.");
@@ -88,6 +88,11 @@ async function loadBotiumConfig(inboundNumber) {
       DEBUG: process.env.DEBUG,
       SIMULATEDPORT: process.env.SIMULATEDPORT
     };
+
+    console.log('\n---------------------------Remaining available domains---------------------------');
+    console.log(available_domains);
+    console.log('\n---------------------------------------------------------------------------------');
+
     return { config: botiumConfig, assigned_domain: ngrok_response.assigned_domain };
   } catch (error) {
     console.error("Error creating ngrok tunnel:", error);
@@ -360,7 +365,7 @@ app.post("/stop-botium-test", async (req, res) => {
 
   try {
     await stopBotiumSession(userId);
-    res.status(200).json({ error_code: 0, data: { conversation_by: "recording_id" }, message: `Botium test stopped for user: ${userId}` });
+    res.status(200).json({ error_code: 0, message: `Botium test stopped for user: ${userId}` });
   } catch (error) {
     console.log('\n---------------------------ERROR---------------------------');
     console.error("Error stopping Botium test:" + `user_id=${userId}`, error);
