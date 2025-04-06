@@ -10,8 +10,8 @@ require("dotenv").config();
 
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const PORT = 3000; 
-const requestTimeout = 6 * 60 * 1000; 
+const PORT = 3000;
+const requestTimeout = 6 * 60 * 1000;
 const botiumInstances = new Map(); // Store Botium instances for each user
 
 app.use(compression({ filter: (req, res) => req.path !== "/start-botium-test" }));
@@ -107,6 +107,7 @@ async function initializeBotium(userId, inboundNumber) {
 
     await botiumInstances[userId].promise;
   }
+  botiumInstances[userId].sid = botiumInstances[userId].instance.pluginInstance.call.sid;
 
   return botiumInstances[userId].instance;
 }
@@ -194,9 +195,8 @@ async function stopBotiumSession(userId) {
 
     try {
       if (botiumContainer.instance && typeof botiumContainer.instance.Stop === 'function') {
-        const call_sid = botiumContainer?.instance?.pluginInstance?.call?.sid;
         console.log(`Attempting to disconnect ngrok...`);
-
+        
         // Increase timeout (e.g., to 30 seconds)
         const timeout = process.env.WAITFORBOTTIMEOUT || 30000; // Default 30 seconds
 
@@ -222,8 +222,6 @@ async function stopBotiumSession(userId) {
         // Clear the Botium instance from memory
         delete botiumInstances[userId];  // Remove the entry from botiumInstances map
         console.log(`Botium container stopped and deleted for user: ${userId}`);
-
-        return call_sid;
       } else {
         console.error(`Botium container for user: ${userId} does not have Stop or Clean method.`);
       }
@@ -318,8 +316,8 @@ app.post("/start-botium-test", async (req, res) => {
         console.log(`Bot: ${userId}, message: ${botResponseText}`);
 
         if (/(bye|thank you!|feel free to ask|feel free to reach out)/i.test(botResponseText)) {
-          const callSid = await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-          sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: callSid } });  // Send call_sid in the response
+          await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
+          sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid } });  // Send call_sid in the response
           break;
         }
 
@@ -328,20 +326,18 @@ app.post("/start-botium-test", async (req, res) => {
         console.log('\n---------------------------Conversation ERROR---------------------------');
         console.error("Bot response error:" + `user_id=${userId}`, err.message);
         console.log('\n-----------------------------------------------------------');
-        const callSid = await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-        sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: callSid } });  // Send call_sid in the response
+        await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
+        sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid } });  // Send call_sid in the response
         break;
       }
     }
 
-    sendSSE({ error_code: 201, data: {}, message: "Test completed" });
+    sendSSE({ error_code: 201, data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid }, message: "Test completed" });
     res.end();
   } catch (error) {
     console.log('\n---------------------------Initialization ERROR---------------------------');
     console.error("Error running Botium test:" + `user_id=${userId}`, error.message);
     console.log('\n-----------------------------------------------------------');
-    const callSid = await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-    sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: callSid } });  // Send call_sid in the response
   } finally {
     clearTimeout(timeoutId);
   }
