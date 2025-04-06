@@ -1,11 +1,11 @@
-name: Deploy Voice-Agent-Testing-API Docker App to AWS EC2
+name: Deploy Voice-Agent-Testing-API Docker App to AWS EC2 And Concurrent User 
 
 on:
   workflow_dispatch:
     inputs:
       name:
-        description: "Deploy the Voice-Agent-Testing-API from Dev"
-        default: "dev"
+        description: "Concurent User setup using ngrok"
+        default: "prod"
 
 permissions:
   id-token: write
@@ -79,7 +79,6 @@ jobs:
                 {"IpProtocol":"tcp","FromPort":80,"ToPort":80,"CidrIp":"0.0.0.0/0"},
                 {"IpProtocol":"tcp","FromPort":443,"ToPort":443,"CidrIp":"0.0.0.0/0"},
                 {"IpProtocol":"tcp","FromPort":3000,"ToPort":3000,"CidrIp":"0.0.0.0/0"},
-                {"IpProtocol":"tcp","FromPort":45100,"ToPort":45100,"CidrIp":"0.0.0.0/0"},
               ]'
   
             for RULE in $(echo "$RULES" | jq -c '.[]'); do
@@ -243,15 +242,12 @@ jobs:
           echo "TWILIO_IVR_AUTH_TOKEN=${{ secrets.TWILIO_IVR_AUTH_TOKEN }}" >> .env
           echo "TWILIO_IVR_FROM=${{ secrets.TWILIO_IVR_FROM }}" >> .env
           echo "TWILIO_IVR_TO=${{ secrets.TWILIO_IVR_TO }}" >> .env
-          echo "TWILIO_IVR_INBOUNDPORT=${{ secrets.TWILIO_IVR_INBOUNDPORT }}" >> .env
-          echo "TWILIO_IVR_PUBLICURL=${{ secrets.TWILIO_IVR_PUBLICURL }}" >> .env
           echo "TWILIO_CALL_DIRECTION=${{ secrets.TWILIO_CALL_DIRECTION }}" >> .env
           echo "TWILIO_IVR_STT=${{ secrets.TWILIO_IVR_STT }}" >> .env
           echo "TWILIO_IVR_TTS=${{ secrets.TWILIO_IVR_TTS }}" >> .env
           echo "DEEPGRAM_API_KEY=${{ secrets.DEEPGRAM_API_KEY }}" >> .env
           echo "DEEPGRAM_STT_MODEL=${{ secrets.DEEPGRAM_STT_MODEL }}" >> .env
           echo "DEEPGRAM_TTS_VOICE=${{ secrets.DEEPGRAM_TTS_VOICE }}" >> .env
-          echo "TWILIO_IVR_STATUS_CALLBACK=${{ secrets.TWILIO_IVR_STATUS_CALLBACK }}" >> .env
           echo "BOTIUM_INBOUND_PROXY_START=${{ secrets.BOTIUM_INBOUND_PROXY_START }}" >> .env
           echo "CLEANUPTEMPDIR=${{ secrets.CLEANUPTEMPDIR }}" >> .env
           echo "TWILIO_IVR_RECORD=${{ secrets.TWILIO_IVR_RECORD }}" >> .env
@@ -259,6 +255,8 @@ jobs:
           echo "SCRIPTING_ENABLE_MEMORY=${{ secrets.SCRIPTING_ENABLE_MEMORY }}" >> .env
           echo "DEBUG=${{ secrets.DEBUG }}" >> .env
           echo "SIMULATEDPORT=${{ secrets.SIMULATEDPORT }}" >> .env
+          echo "NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }}" >> .env
+
 
           chmod 600 /home/ubuntu/.env
         
@@ -276,7 +274,7 @@ jobs:
           ExecStart=/usr/bin/docker run --name ${CONTAINER_NAME} \
             --env-file /home/ubuntu/.env \
             -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }} \
-            -p 3000:3000 -p 45100:45100 \
+            -p 3000:3000 \
             ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           ExecStop=/usr/bin/docker stop ${CONTAINER_NAME}
 
@@ -302,10 +300,23 @@ jobs:
             
                 location / {
                     proxy_pass http://localhost:3000;
+                    proxy_http_version 1.1;
+                    proxy_buffering off;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "upgrade";
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
+
+                    proxy_read_timeout 300;
+                    proxy_connect_timeout 300;
+                    proxy_send_timeout 300;
+
+                    # Optional: security headers
+                    add_header X-Content-Type-Options nosniff;
+                    add_header X-Frame-Options DENY;
+                    add_header X-XSS-Protection "1; mode=block";
                 }
             }
             EOL
@@ -322,3 +333,4 @@ jobs:
               sudo certbot --nginx -d testagent.modelrocket.ai --non-interactive --agree-tos -m dev@modelrocket.ai
 
               # Auto-renewal (already set by Certbot via cron or systemd)
+              sudo systemctl restart ${CONTAINER_NAME}

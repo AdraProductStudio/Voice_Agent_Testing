@@ -23,11 +23,11 @@ RUN npm install \
     botium-connector-twilio-ivr \
     twilio \
     openai \
-    fs \
-    ngrok \
+    @ngrok/ngrok \
     mocha \
     chai \
-    dotenv
+    dotenv \
+    cors
 
 # Initialize Botium
 RUN botium-cli init \
@@ -37,7 +37,7 @@ RUN botium-cli init \
 COPY . .
 
 # Configure ports
-EXPOSE 45100 3000
+EXPOSE 3000
 
 # Entrypoint script
 COPY entrypoint.sh /entrypoint.sh

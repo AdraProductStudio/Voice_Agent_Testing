@@ -1,8 +1,10 @@
 {
   "dependencies": {
+    "@ngrok/ngrok": "^1.4.1",
+    "axios": "^1.8.4",
     "botium-bindings": "^2.1.14",
     "botium-connector-twilio-ivr": "^0.0.4",
-    "botium-core": "^1.15.4",
+    "botium-core": "^1.13.15",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
