@@ -52,6 +52,7 @@ async function startNgrok() {
       }
     } else {
       console.log("No available domains.");
+      return null; // No available domains
     }
   } catch (error) {
     console.error("Error starting ngrok:", error.message);
@@ -63,37 +64,40 @@ async function startNgrok() {
 async function loadBotiumConfig(inboundNumber) {
   try {
     const ngrok_response = await startNgrok(); // Get ngrok public URL dynamically
+    if (ngrok_response) {
+      let botiumConfig = {
+        PROJECTNAME: process.env.PROJECTNAME,
+        CONTAINERMODE: process.env.CONTAINERMODE,
+        TWILIO_IVR_ACCOUNT_SID: process.env.TWILIO_IVR_ACCOUNT_SID,
+        TWILIO_IVR_AUTH_TOKEN: process.env.TWILIO_IVR_AUTH_TOKEN,
+        TWILIO_IVR_FROM: process.env.TWILIO_IVR_FROM,
+        TWILIO_IVR_INBOUNDPORT: ngrok_response.port,
+        TWILIO_IVR_PUBLICURL: ngrok_response.url,
+        TWILIO_CALL_DIRECTION: process.env.TWILIO_CALL_DIRECTION,
+        TWILIO_IVR_STT: process.env.TWILIO_IVR_STT,
+        TWILIO_IVR_TTS: process.env.TWILIO_IVR_TTS,
+        DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY,
+        DEEPGRAM_STT_MODEL: process.env.DEEPGRAM_STT_MODEL,
+        DEEPGRAM_TTS_VOICE: process.env.DEEPGRAM_TTS_VOICE,
+        TWILIO_IVR_STATUS_CALLBACK: `${ngrok_response.url}/twilio-ivr/status`,
+        BOTIUM_INBOUND_PROXY_START: process.env.BOTIUM_INBOUND_PROXY_START,
+        TWILIO_IVR_RECORD: process.env.TWILIO_IVR_RECORD,
+        TWILIO_IVR_TO: inboundNumber,
+        CLEANUPTEMPDIR: process.env.CLEANUPTEMPDIR,
+        THINKTIME: process.env.THINKTIME,
+        WAITFORBOTTIMEOUT: process.env.WAITFORBOTTIMEOUT,
+        DEBUG: process.env.DEBUG,
+        SIMULATEDPORT: process.env.SIMULATEDPORT
+      };
 
-    let botiumConfig = {
-      PROJECTNAME: process.env.PROJECTNAME,
-      CONTAINERMODE: process.env.CONTAINERMODE,
-      TWILIO_IVR_ACCOUNT_SID: process.env.TWILIO_IVR_ACCOUNT_SID,
-      TWILIO_IVR_AUTH_TOKEN: process.env.TWILIO_IVR_AUTH_TOKEN,
-      TWILIO_IVR_FROM: process.env.TWILIO_IVR_FROM,
-      TWILIO_IVR_INBOUNDPORT: ngrok_response.port,
-      TWILIO_IVR_PUBLICURL: ngrok_response.url,
-      TWILIO_CALL_DIRECTION: process.env.TWILIO_CALL_DIRECTION,
-      TWILIO_IVR_STT: process.env.TWILIO_IVR_STT,
-      TWILIO_IVR_TTS: process.env.TWILIO_IVR_TTS,
-      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY,
-      DEEPGRAM_STT_MODEL: process.env.DEEPGRAM_STT_MODEL,
-      DEEPGRAM_TTS_VOICE: process.env.DEEPGRAM_TTS_VOICE,
-      TWILIO_IVR_STATUS_CALLBACK: `${ngrok_response.url}/twilio-ivr/status`,
-      BOTIUM_INBOUND_PROXY_START: process.env.BOTIUM_INBOUND_PROXY_START,
-      TWILIO_IVR_RECORD: process.env.TWILIO_IVR_RECORD,
-      TWILIO_IVR_TO: inboundNumber,
-      CLEANUPTEMPDIR: process.env.CLEANUPTEMPDIR,
-      THINKTIME: process.env.THINKTIME,
-      WAITFORBOTTIMEOUT: process.env.WAITFORBOTTIMEOUT,
-      DEBUG: process.env.DEBUG,
-      SIMULATEDPORT: process.env.SIMULATEDPORT
-    };
+      console.log('\n---------------------------Remaining available domains---------------------------');
+      console.log(available_domains);
+      console.log('\n---------------------------------------------------------------------------------');
 
-    console.log('\n---------------------------Remaining available domains---------------------------');
-    console.log(available_domains);
-    console.log('\n---------------------------------------------------------------------------------');
-
-    return { config: botiumConfig, assigned_domain: ngrok_response.assigned_domain };
+      return { config: botiumConfig, assigned_domain: ngrok_response.assigned_domain };
+    } else {
+      return null; // No ngrok response
+    }
   } catch (error) {
     console.error("Error creating ngrok tunnel:", error);
   }
@@ -106,28 +110,31 @@ async function initializeBotium(userId, inboundNumber) {
     console.error(`for user: ${userId}`);
 
     const botiumConfig = await loadBotiumConfig(inboundNumber);
+    if (botiumConfig) {
+      botiumInstances[userId] = {
+        isInitializing: true,
+        isStopping: false,
+        ngrok_domain: botiumConfig.config.TWILIO_IVR_PUBLICURL,
+        assigned_domain: botiumConfig.assigned_domain,
+        promise: (async () => {
+          const botiumDriver = new BotDriver(botiumConfig.config);
+          const botiumContainer = await botiumDriver.Build();
+          await botiumContainer.Start();
+          console.log(`✅ Botium container started for user: ${userId}`);
 
-    botiumInstances[userId] = {
-      isInitializing: true,
-      isStopping: false,
-      ngrok_domain: botiumConfig.config.TWILIO_IVR_PUBLICURL,
-      assigned_domain: botiumConfig.assigned_domain,
-      promise: (async () => {
-        const botiumDriver = new BotDriver(botiumConfig.config);
-        const botiumContainer = await botiumDriver.Build();
-        await botiumContainer.Start();
-        console.log(`✅ Botium container started for user: ${userId}`);
+          botiumInstances[userId].instance = botiumContainer;
+          botiumInstances[userId].isInitializing = false;
+        })(),
+      };
 
-        botiumInstances[userId].instance = botiumContainer;
-        botiumInstances[userId].isInitializing = false;
-      })(),
-    };
-
-    await botiumInstances[userId].promise;
+      await botiumInstances[userId].promise;
+      botiumInstances[userId].sid = botiumInstances[userId].instance.pluginInstance.call.sid;
+      return botiumInstances[userId].instance;
+    } else {
+      return null; // No botiumConfig response
+    }
   }
-  botiumInstances[userId].sid = botiumInstances[userId].instance.pluginInstance.call.sid;
 
-  return botiumInstances[userId].instance;
 }
 
 // Get recording SID
@@ -294,13 +301,13 @@ app.post("/start-botium-test", async (req, res) => {
 
   try {
     const botiumInstance = await initializeBotium(userId, inboundNumber);
-
-    let userInput = "Hello";
-
     function sendSSE(data) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
       res.flush();
     }
+
+    if (!botiumInstance) sendSSE({ error_code: 201, message: "All servives are busy please try after sometime" });
+    let userInput = "Hello";
 
     function logConversation(type, message) {
       const timestamp = new Date().toISOString();
