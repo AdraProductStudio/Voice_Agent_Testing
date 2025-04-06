@@ -13,6 +13,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const PORT = 3000;
 const requestTimeout = 6 * 60 * 1000;
 const botiumInstances = new Map(); // Store Botium instances for each user
+let available_domains = process.env.NGROCK_DOMAIN_LIST?.split(',') || []
 
 app.use(compression({ filter: (req, res) => req.path !== "/start-botium-test" }));
 app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] }));
@@ -29,18 +30,28 @@ async function startNgrok() {
     const randomPort = generateRandomPort(); // Generate a random port
     console.log(`Starting ngrok on port ${randomPort}...`);
 
-    const listener = await ngrok.connect({
-      proto: "http",
-      addr: randomPort,
-      authtoken: process.env.NGROK_AUTH_TOKEN,
-    });
+    // Assuming at least one available domain
+    if (available_domains.length > 0) {
+      let assigning_domain = available_domains[0];
+      available_domains.shift();
 
-    if (listener && listener.url()) {
-      const publicUrl = listener.url();
-      console.log("Ngrok tunnel established at:", publicUrl);
-      return { url: publicUrl, port: randomPort };
+      const listener = await ngrok.connect({
+        proto: "http",
+        domain: assigning_domain,
+        addr: randomPort,
+        authtoken: process.env.NGROK_AUTH_TOKEN,
+      });
+
+      if (listener && listener.url()) {
+        const publicUrl = listener.url();
+        console.log("Ngrok tunnel established at:", publicUrl);
+        let ngrok_data = { url: publicUrl, port: randomPort, assigned_domain: assigning_domain }
+        return ngrok_data
+      } else {
+        throw new Error("Ngrok did not return a valid listener object with a URL.");
+      }
     } else {
-      throw new Error("Ngrok did not return a valid listener object with a URL.");
+      console.log("No available domains.");
     }
   } catch (error) {
     console.error("Error starting ngrok:", error.message);
@@ -77,7 +88,7 @@ async function loadBotiumConfig(inboundNumber) {
       DEBUG: process.env.DEBUG,
       SIMULATEDPORT: process.env.SIMULATEDPORT
     };
-    return botiumConfig;
+    return { config: botiumConfig, assigned_domain: ngrok_response.assigned_domain };
   } catch (error) {
     console.error("Error creating ngrok tunnel:", error);
   }
@@ -94,8 +105,10 @@ async function initializeBotium(userId, inboundNumber) {
     botiumInstances[userId] = {
       isInitializing: true,
       isStopping: false,
+      ngrok_domain: botiumConfig.config.TWILIO_IVR_PUBLICURL,
+      assigned_domain: botiumConfig.assigned_domain,
       promise: (async () => {
-        const botiumDriver = new BotDriver(botiumConfig);
+        const botiumDriver = new BotDriver(botiumConfig.config);
         const botiumContainer = await botiumDriver.Build();
         await botiumContainer.Start();
         console.log(`✅ Botium container started for user: ${userId}`);
@@ -142,7 +155,6 @@ app.post("/get-recording-by-sid", async (req, res) => {
   }
 });
 
-
 async function getRecordingSid(callSid) {
   try {
     const client = twilio(process.env.TWILIO_IVR_ACCOUNT_SID, process.env.TWILIO_IVR_AUTH_TOKEN);
@@ -161,7 +173,6 @@ async function getRecordingSid(callSid) {
     throw error;
   }
 }
-
 
 async function getRecordingDetails(recordingSid) {
   try {
@@ -186,6 +197,7 @@ async function getRecordingDetails(recordingSid) {
 // Stop the Botium session for a specific user
 async function stopBotiumSession(userId) {
   const botiumContainer = botiumInstances[userId];
+  let repush_domain = botiumContainer?.assigned_domain
 
   // Check if the botium container exists and is not initializing or stopping
   if (botiumContainer && !botiumContainer.isInitializing && !botiumContainer.isStopping) {
@@ -196,7 +208,7 @@ async function stopBotiumSession(userId) {
     try {
       if (botiumContainer.instance && typeof botiumContainer.instance.Stop === 'function') {
         console.log(`Attempting to disconnect ngrok...`);
-        
+
         // Increase timeout (e.g., to 30 seconds)
         const timeout = process.env.WAITFORBOTTIMEOUT || 30000; // Default 30 seconds
 
@@ -218,8 +230,7 @@ async function stopBotiumSession(userId) {
 
         // Disconnect ngrok
         await ngrok.disconnect(botiumContainer.instance.caps.TWILIO_IVR_PUBLICURL);
-
-        // Clear the Botium instance from memory
+        available_domains.push(repush_domain) // Re-push the domain back to available_domains
         delete botiumInstances[userId];  // Remove the entry from botiumInstances map
         console.log(`Botium container stopped and deleted for user: ${userId}`);
       } else {
@@ -236,7 +247,6 @@ async function stopBotiumSession(userId) {
   }
   console.log('\n-------------------------------------------------------------------------------');
 }
-
 
 // Generate dynamic input for Botium based on response from OpenAI
 async function generateDynamicInput(botResponseText, systemPrompt) {
@@ -271,14 +281,15 @@ app.post("/start-botium-test", async (req, res) => {
   const timeoutId = setTimeout(async () => {
     if (botiumInstances[userId] && !botiumInstances[userId].isInitializing && !botiumInstances[userId].isStopping) {
       console.log(`Request timed out for user ${userId}.`);
-      const callSid = await stopBotiumSession(userId);  // Get the call_sid when stopping the session
-      res.write(`data: ${JSON.stringify({ error_code: 201, message: "Request timed out.", data: { conversation_by: "recording_id", call_id: callSid } })}\n\n`);
+      await stopBotiumSession(userId);  // Get the call_sid when stopping the session
+      res.write(`data: ${JSON.stringify({ error_code: 201, message: "Request timed out.", data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid } })}\n\n`);
       res.end();
     }
   }, requestTimeout);
 
   try {
     const botiumInstance = await initializeBotium(userId, inboundNumber);
+
     let userInput = "Hello";
 
     function sendSSE(data) {
@@ -288,7 +299,7 @@ app.post("/start-botium-test", async (req, res) => {
 
     function logConversation(type, message) {
       const timestamp = new Date().toISOString();
-      const logEntry = { conversation_by: type, userId, message, conversation_time: timestamp };
+      const logEntry = { conversation_by: type, userId, message, conversation_time: timestamp, call_id: botiumInstances[userId]?.sid };
       sendSSE({ error_code: 0, data: logEntry, message: "Conversation log" });
     }
 
@@ -317,7 +328,7 @@ app.post("/start-botium-test", async (req, res) => {
 
         if (/(bye|thank you!|feel free to ask|feel free to reach out)/i.test(botResponseText)) {
           await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-          sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid } });  // Send call_sid in the response
+          sendSSE({ error_code: 0, message: "Conversation ended." });  // Send call_sid in the response
           break;
         }
 
@@ -327,12 +338,12 @@ app.post("/start-botium-test", async (req, res) => {
         console.error("Bot response error:" + `user_id=${userId}`, err.message);
         console.log('\n-----------------------------------------------------------');
         await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-        sendSSE({ error_code: 0, message: "Conversation ended.", data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid } });  // Send call_sid in the response
+        sendSSE({ error_code: 0, message: "Conversation ended." });  // Send call_sid in the response
         break;
       }
     }
 
-    sendSSE({ error_code: 201, data: { conversation_by: "recording_id", call_id: botiumInstances[userId]?.sid }, message: "Test completed" });
+    sendSSE({ error_code: 201, message: "Test completed" });
     res.end();
   } catch (error) {
     console.log('\n---------------------------Initialization ERROR---------------------------');
@@ -348,8 +359,8 @@ app.post("/stop-botium-test", async (req, res) => {
   if (!userId) return res.status(400).json({ error: "Missing userId parameter." });
 
   try {
-    const callSid = await stopBotiumSession(userId);
-    res.status(200).json({ error_code: 0, data: { conversation_by: "recording_id", call_id: callSid }, message: `Botium test stopped for user: ${userId}` });
+    await stopBotiumSession(userId);
+    res.status(200).json({ error_code: 0, data: { conversation_by: "recording_id" }, message: `Botium test stopped for user: ${userId}` });
   } catch (error) {
     console.log('\n---------------------------ERROR---------------------------');
     console.error("Error stopping Botium test:" + `user_id=${userId}`, error);
