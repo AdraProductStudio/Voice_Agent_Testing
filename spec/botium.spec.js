@@ -221,8 +221,8 @@ async function stopBotiumSession(userId) {
       if (botiumContainer.instance && typeof botiumContainer.instance.Stop === 'function') {
         console.log(`Attempting to disconnect ngrok...`);
 
-        // Increase timeout (e.g., to 30 seconds)
-        const timeout = process.env.WAITFORBOTTIMEOUT || 30000; // Default 30 seconds
+        // Increase timeout (e.g., to 15 seconds)
+        const timeout = 150000; // Default 15 seconds
 
         // Helper function to handle timeout
         const timeoutPromise = new Promise((_, reject) => {
