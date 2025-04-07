@@ -10,7 +10,7 @@ require("dotenv").config();
 
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const PORT = 3000;
+const PORT = 3001;
 const requestTimeout = 6 * 60 * 1000;
 const botiumInstances = new Map(); // Store Botium instances for each user
 let available_domains = process.env.NGROCK_DOMAIN_LIST?.split(',') || []
@@ -249,6 +249,7 @@ async function stopBotiumSession(userId) {
         console.error(`Botium container for user: ${userId} does not have Stop or Clean method.`);
       }
     } catch (error) {
+      available_domains.push(repush_domain)
       console.error("Error stopping Botium container:", error);
     } finally {
       // Set isStopping to false when finished
@@ -256,6 +257,7 @@ async function stopBotiumSession(userId) {
     }
   } else {
     console.log(`Botium container for user: ${userId} is either still initializing or already stopping.`);
+    available_domains.push(repush_domain)
   }
   console.log('\n-------------------------------------------------------------------------------');
 }
@@ -340,7 +342,7 @@ app.post("/start-botium-test", async (req, res) => {
 
         if (/(bye|thank you!|feel free to ask|feel free to reach out)/i.test(botResponseText)) {
           await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-          sendSSE({ error_code: 0, message: "Conversation ended." });  // Send call_sid in the response
+          sendSSE({ error_code: 201, message: "Conversation ended." });  // Send call_sid in the response
           break;
         }
 
@@ -350,7 +352,7 @@ app.post("/start-botium-test", async (req, res) => {
         console.error("Bot response error:" + `user_id=${userId}`, err.message);
         console.log('\n-----------------------------------------------------------');
         await stopBotiumSession(userId);  // Stop Botium session and get the call_sid
-        sendSSE({ error_code: 0, message: "Conversation ended." });  // Send call_sid in the response
+        sendSSE({ error_code: 201, message: "Conversation ended." });  // Send call_sid in the response
         break;
       }
     }
