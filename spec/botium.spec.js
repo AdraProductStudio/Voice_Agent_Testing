@@ -10,7 +10,7 @@ require("dotenv").config();
 
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const PORT = 3001;
+const PORT = 3000;
 const requestTimeout = 6 * 60 * 1000;
 const botiumInstances = new Map(); // Store Botium instances for each user
 let available_domains = process.env.NGROCK_DOMAIN_LIST?.split(',') || []
