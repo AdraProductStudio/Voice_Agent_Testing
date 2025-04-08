@@ -6,11 +6,12 @@ const cors = require("cors");
 const compression = require("compression");
 const ngrok = require("@ngrok/ngrok");
 const twilio = require('twilio');
+const axios = require('axios');
 require("dotenv").config();
 
 const app = express();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const PORT = 3000;
+const PORT = 3001;
 const requestTimeout = 5 * 60 * 1000;
 const botiumInstances = new Map(); // Store Botium instances for each user
 let available_domains = process.env.NGROCK_DOMAIN_LIST?.split(',') || []
@@ -147,15 +148,14 @@ app.post("/get-recording-by-sid", async (req, res) => {
   console.log(`For call sid: ${callSid}...`);
 
   try {
-    const recordingSid = await getRecordingSid(callSid);  // Fetch recording SID using the call SID
+    const recordings = await getRecordingSid(callSid);  // Fetch recording SID using the call SID
 
-    if (recordingSid) {
-
+    if (recordings) {
       res.status(200).json({
         error_code: 0,
         message: "Recording fetched successfully.",
         data: {
-          recordingUrl: recordingSid
+          recordings: recordings.audioSrc,
         },
       });
     } else {
@@ -180,8 +180,22 @@ async function getRecordingSid(callSid) {
 
       if (recordings.length > 0) {
         let mediaUrl = recordings[0]?.mediaUrl?.replace('https://', '') || '';
-        mediaUrl = `https://${mediaUrl}?Token=${process.env.TWILIO_IVR_AUTH_TOKEN}`;
-        return mediaUrl;
+        mediaUrl = `https://${mediaUrl}`;
+
+        const response = await axios.get(mediaUrl, {
+          auth: {
+            username: process.env.TWILIO_IVR_ACCOUNT_SID,
+            password: process.env.TWILIO_IVR_AUTH_TOKEN
+          },
+          responseType: 'arraybuffer' // or stream, if needed
+        });
+
+        const base64Audio = Buffer.from(response.data).toString('base64');
+        const contentType = response.headers['content-type']; // e.g., audio/mpeg or audio/wav
+
+        return {
+          audioSrc: `data:${contentType};base64,${base64Audio}`
+        };
       }
 
       attempts++;
