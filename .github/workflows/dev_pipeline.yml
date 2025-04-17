@@ -331,3 +331,7 @@ jobs:
 
               # Auto-renewal (already set by Certbot via cron or systemd)
               sudo systemctl restart ${CONTAINER_NAME}
+
+      - name: Reboot EC2 Instance
+        run: |
+              aws ec2 reboot-instances --instance-ids ${{ env.instance_id }} --region ${{ env.AWS_REGION }}
